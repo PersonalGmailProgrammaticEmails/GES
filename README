@@ -1,0 +1,14 @@
+This repository requires that you set up OAuth credentials for
+google.  In addition, you need to make sure that you have the
+correct scopes enabled for your application, or you won't be able to
+use this correctly.
+
+I will update this information as I develop this more.  The assumption
+for this app is that you have access to a browser on the node this app is
+running and that you are not interested in sending mail from accounts in which
+you do not own.
+
+With these two assumptions, you can make this app work as a test account on 
+google cloud.
+
+More details, when I'm ready to distribute more widely.
