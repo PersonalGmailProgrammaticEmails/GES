@@ -15,19 +15,6 @@ import (
     "erichCompSci/std/ges/internal/auth"
 )
 
-func pickUpAuthCodeWrapper(finished_chan chan string) (func (http.ResponseWriter, *http.Request)) {
-    return func(w http.ResponseWriter, req *http.Request) {
-        pickUpAuthCode(w, req, finished_chan)
-    }
-}
-
-func pickUpAuthCode(w http.ResponseWriter, req *http.Request, final_resp chan string) {
-    //fmt.Printf("The auth code query values: %s\n", req.URL.Query()["code"])
-    //fmt.Printf("Just the first: %s\n", req.URL.Query()["code"][0])
-    final_resp <- req.URL.Query()["code"][0]
-    //os.Stdin.Write([]byte(req.URL.Query()["code"][0]))
-    //os.Stdin.Write([]byte("\n"))
-}
 
 func main() {
     //authKey := flag.String("auth", "", "The authorization key")
@@ -46,7 +33,7 @@ func main() {
     the_server := http.Server {
         Addr: "localhost:80",
     }
-    http.DefaultServeMux.HandleFunc("/", pickUpAuthCodeWrapper(auth_key))
+    http.DefaultServeMux.HandleFunc("/", auth.PickUpAuthCodeWrapper(auth_key))
 
 
     go func() {
@@ -67,7 +54,7 @@ func main() {
     }
     client := auth.GetClient(config, auth_key)
 
-    fmt.Printf("Shutting the server down...")
+    fmt.Printf("Shutting the server down...\n")
     the_server.Shutdown(ctx)
 
     srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
