@@ -1,25 +1,43 @@
 package main
 
 import (
-    //"flag"
+    "flag"
     "context"
     "fmt"
     "log"
     "net/http"
     "os"
+    "net"
 
     "golang.org/x/oauth2/google"
     "google.golang.org/api/gmail/v1"
     "google.golang.org/api/option"
 
     "erichCompSci/std/ges/internal/auth"
+
+    //"google.golang.org/grpc"
+    "google.golang.org/grpc"
+	pb "erichCompSci/std/ges/GesProtobuf/ges_protos"
 )
+
+var (
+	port = flag.Int("port", 50052, "The GES grpc server port")
+)
+
+type server struct {
+    pb.UnimplementedGesProtoServiceServer
+}
+
+
+func (s *server) SendEmail(ctx context.Context, in *pb.SendEmailRequest) (*pb.SendEmailResponse, error) {
+    log.Printf("Received: %v", in)
+    return &pb.SendEmailResponse{}, nil
+}
 
 
 func main() {
-    //authKey := flag.String("auth", "", "The authorization key")
 
-    //flag.Parse()
+    flag.Parse()
 
     ctx := context.Background()
     home_dir := os.Getenv("HOME")
@@ -62,7 +80,10 @@ func main() {
             log.Fatalf("Unable to retrieve Gmail client: %v", err)
     }
 
-    user := "me"
+    //TODO: Remove this
+    _ = srv
+
+    /*user := "me"
     r, err := srv.Users.Labels.List(user).Do()
     if err != nil {
             log.Fatalf("Unable to retrieve labels: %v", err)
@@ -74,5 +95,21 @@ func main() {
     fmt.Println("Labels:")
     for _, l := range r.Labels {
             fmt.Printf("- %s\n", l.Name)
-    }
+    }*/
+
+    //Set up grpc server
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	s := grpc.NewServer()
+    go_server := &server{}
+
+	pb.RegisterGesProtoServiceServer(s, go_server)
+	log.Printf("Grpc server listening at %v", lis.Addr())
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+
 }
