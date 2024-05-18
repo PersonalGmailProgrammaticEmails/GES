@@ -1,4 +1,4 @@
-module erichCompSci/std/ges
+module PersonalGmailProgrammaticEmails/std/ges
 
 go 1.21.3
 

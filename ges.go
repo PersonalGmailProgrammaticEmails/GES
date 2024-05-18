@@ -13,11 +13,11 @@ import (
     "google.golang.org/api/gmail/v1"
     "google.golang.org/api/option"
 
-    "erichCompSci/std/ges/internal/auth"
+    "PersonalGmailProgrammaticEmails/std/ges/internal/auth"
 
     //"google.golang.org/grpc"
     "google.golang.org/grpc"
-	pb "erichCompSci/std/ges/GesProtobuf/ges_protos"
+	pb "PersonalGmailProgrammaticEmails/std/ges/GesProtobuf/ges_protos"
 )
 
 var (
