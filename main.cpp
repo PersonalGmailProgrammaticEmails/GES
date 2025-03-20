@@ -1,21 +1,29 @@
 #include <iostream>
 #include <string>
 #include <curl/curl.h>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 // Callback function for libcurl to handle the server response
 size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *s) {
     size_t newLength = size * nmemb;
     s->append((char*)contents, newLength);
-    // Print the response in real-time for debugging
-    std::cout << "SERVER: " << std::string((char*)contents, newLength);
+    // Log the response in real-time for debugging
+    spdlog::info("SERVER: {}", std::string((char*)contents, newLength));
     return newLength;
 }
 
 int main(int argc, char* argv[]) {
+    // Initialize logger
+    auto console = spdlog::stdout_color_mt("console");
+    spdlog::set_default_logger(console);
+    spdlog::set_level(spdlog::level::debug);
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+
     // Check if we have the required arguments
     if (argc < 6) {
-        std::cout << "Usage: " << argv[0] << " <gmail_username> <app_password> <recipient> <subject> <message>" << std::endl;
-        std::cout << "Note: It's recommended to use Gmail App Passwords instead of your main account password." << std::endl;
+        spdlog::warn("Usage: {} <gmail_username> <app_password> <recipient> <subject> <message>", argv[0]);
+        spdlog::info("Note: It's recommended to use Gmail App Passwords instead of your main account password.");
         return 1;
     }
 
@@ -41,32 +49,32 @@ int main(int argc, char* argv[]) {
     // Set up the curl session
     curl = curl_easy_init();
     if (curl) {
-        std::cout << "DEBUG: curl initialized successfully" << std::endl;
+        spdlog::debug("curl initialized successfully");
         
         // Enable verbose output for more detailed debugging
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
         
         // Set the SMTP server (Gmail)
         curl_easy_setopt(curl, CURLOPT_URL, "smtps://smtp.gmail.com:465");
-        std::cout << "DEBUG: Set SMTP server to smtp.gmail.com:465" << std::endl;
+        spdlog::debug("Set SMTP server to smtp.gmail.com:465");
 
         // Set the username and password
         curl_easy_setopt(curl, CURLOPT_USERNAME, username.c_str());
         curl_easy_setopt(curl, CURLOPT_PASSWORD, password.c_str());
-        std::cout << "DEBUG: Set authentication credentials" << std::endl;
+        spdlog::debug("Set authentication credentials");
 
         // Set SSL verification (required for Gmail)
         curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_ALL);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-        std::cout << "DEBUG: Configured SSL settings" << std::endl;
+        spdlog::debug("Configured SSL settings");
 
         // Set the sender and recipient
         struct curl_slist *recipients = NULL;
         recipients = curl_slist_append(recipients, recipient.c_str());
         curl_easy_setopt(curl, CURLOPT_MAIL_FROM, username.c_str());
         curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
-        std::cout << "DEBUG: Set sender and recipient" << std::endl;
+        spdlog::debug("Set sender and recipient");
 
         // Set the payload
         curl_easy_setopt(curl, CURLOPT_READDATA, &payload);
@@ -82,32 +90,32 @@ int main(int argc, char* argv[]) {
                 }
                 return 0;
             });
-        std::cout << "DEBUG: Configured email payload" << std::endl;
+        spdlog::debug("Configured email payload");
 
         // Set up the callback function to handle the server response
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-        std::cout << "DEBUG: Set up response callback" << std::endl;
+        spdlog::debug("Set up response callback");
 
         // Send the email
-        std::cout << "\n==== SENDING EMAIL ====\n" << std::endl;
+        spdlog::info("==== SENDING EMAIL ====");
         res = curl_easy_perform(curl);
 
         // Check for errors
         if (res != CURLE_OK) {
-            std::cerr << "\nERROR: curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+            spdlog::error("curl_easy_perform() failed: {}", curl_easy_strerror(res));
         } else {
-            std::cout << "\nSUCCESS: Email sent successfully!" << std::endl;
+            spdlog::info("Email sent successfully!");
         }
 
         // Display full server response buffer
-        std::cout << "\n==== COMPLETE SERVER RESPONSE ====\n" << readBuffer << std::endl;
+        spdlog::info("==== COMPLETE SERVER RESPONSE ====\n{}", readBuffer);
 
         // Clean up
         curl_slist_free_all(recipients);
         curl_easy_cleanup(curl);
     } else {
-        std::cerr << "ERROR: Failed to initialize curl" << std::endl;
+        spdlog::error("Failed to initialize curl");
     }
     
     curl_global_cleanup();
