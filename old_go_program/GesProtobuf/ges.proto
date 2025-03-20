@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package ges_protos;
+option go_package = "./ges_protos";
+
+// Interface exported by the server.
+service GesProtoService {
+
+  // Get the history for the stock symbol
+  rpc SendEmail(SendEmailRequest) returns (SendEmailResponse) {}
+}
+
+message SendEmailRequest {
+    repeated string     emails = 1;
+    string              subject = 2;
+    string              body = 3;
+}
+
+message SendEmailResponse {
+}
