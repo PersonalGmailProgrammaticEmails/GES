@@ -26,6 +26,12 @@ struct OAuth2Config {
     time_t token_expiry = 0;
 };
 
+// Define a static payload struct to avoid scope issues
+struct UploadStatus {
+    const char* data;
+    size_t size;
+};
+
 /**
  * Read recipients from a file, one email address per line
  * @param filename Path to the file containing email addresses
@@ -325,11 +331,6 @@ bool ensureValidAccessToken(OAuth2Config& config) {
     return false;
 }
 
-// Define a static payload struct to avoid scope issues
-struct UploadStatus {
-    const char* data;
-    size_t size;
-};
 
 // Function to send an email using OAuth2 authentication
 bool sendEmail(const OAuth2Config& config, 
@@ -468,14 +469,10 @@ bool sendEmail(const OAuth2Config& config,
 
 int main(int argc, char* argv[]) {
     // Initialize logger
-    try {
-        auto console = spdlog::stdout_color_mt("console");
-        spdlog::set_default_logger(console);
-        spdlog::set_level(spdlog::level::debug);
-        spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
-    } catch (const spdlog::spdlog_ex& ex) {
-        std::cerr << "Logger initialization failed: " << ex.what() << std::endl;
-    }
+    auto console = spdlog::stdout_color_mt("console");
+    spdlog::set_default_logger(console);
+    spdlog::set_level(spdlog::level::debug);
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 
     // Check if we have the required arguments
     if (argc < 3) {
