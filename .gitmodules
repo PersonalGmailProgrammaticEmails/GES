@@ -1,3 +1,0 @@
-[submodule "GesProtobuf"]
-	path = GesProtobuf
-	url = git@github.com:erichCompSci/GesProtobuf.git
