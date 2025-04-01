@@ -9,9 +9,24 @@
 #include <nlohmann/json.hpp> // For JSON parsing
 #include <ctime>
 #include <random>
+#include <thread>
+#include <chrono>
+#include <atomic>
+#include <grpcpp/grpcpp.h>
+
+// Include the generated protocol buffer headers
+#include "ges_interface.grpc.pb.h"
+#include "ges_interface.pb.h"
 
 // Using json library for easier parsing
 using json = nlohmann::json;
+//using namespace ges;
+
+// Define a static payload struct to avoid scope issues
+struct UploadStatus {
+    const char* data;
+    size_t size;
+};
 
 /**
  * Gmail App Password configuration
@@ -19,12 +34,6 @@ using json = nlohmann::json;
 struct AppPasswordConfig {
     std::string username;
     std::string app_password;
-};
-
-// Define a static payload struct to avoid scope issues
-struct UploadStatus {
-    const char* data;
-    size_t size;
 };
 
 /**
@@ -251,6 +260,58 @@ bool sendEmail(const AppPasswordConfig& config,
     return success;
 }
 
+// Implementation of the EmailService defined in the proto file
+class EmailServiceImpl final : public ges_interface::EmailService::Service {
+public:
+    EmailServiceImpl(const AppPasswordConfig& config) : config_(config), shutdown_requested_(false) {}
+
+    grpc::Status SendEmail(grpc::ServerContext* context, const ges_interface::EmailRequest* request, 
+                           ges_interface::EmailResponse* response) override {
+        std::vector<std::string> recipients;
+        
+        // Otherwise, use the recipients directly from the request
+        for (int i = 0; i < request->recipients_size(); i++) {
+            recipients.push_back(request->recipients(i));
+        }
+        
+        // Validate we have recipients
+        if (recipients.empty()) {
+            response->set_success(false);
+            response->set_error_message("No recipients specified");
+            response->set_recipient_count(0);
+            return grpc::Status::OK;
+        }
+        
+        // Send the email
+        bool success = sendEmail(config_, recipients, request->subject(), request->the_message());
+        
+        // Populate the response
+        response->set_success(success);
+        if (!success) {
+            response->set_error_message("Failed to send email");
+        }
+        response->set_recipient_count(recipients.size());
+        
+        return grpc::Status::OK;
+    }
+
+    grpc::Status Shutdown(grpc::ServerContext* context, const ges_interface::ShutdownRequest* request,
+                          ges_interface::ShutdownResponse* response) override {
+        spdlog::info("Shutdown requested. Reason: {}", request->reason());
+        shutdown_requested_ = true;
+        response->set_accepted(true);
+        return grpc::Status::OK;
+    }
+
+    bool isShutdownRequested() const {
+        return shutdown_requested_;
+    }
+
+private:
+    AppPasswordConfig config_;
+    std::atomic<bool> shutdown_requested_;
+};
+
 int main(int argc, char* argv[]) {
     // Initialize logger
     auto console = spdlog::stdout_color_mt("console");
@@ -260,14 +321,19 @@ int main(int argc, char* argv[]) {
 
     // Check if we have the required arguments
     if (argc < 2) {
-        spdlog::warn("Usage: {} <app_password_config.json> [recipient_file/email] [subject] [message]", argv[0]);
-        spdlog::warn("  - app_password_config.json must contain both 'username' and 'app_password' fields");
-        spdlog::warn("  - If recipient_file is provided, emails will be sent to all addresses in the file");
-        spdlog::warn("  - If recipient_email is provided directly, it will be used as the recipient");
+        spdlog::error("Usage: {} <app_password_config.json> [server_address]", argv[0]);
+        spdlog::error("  - app_password_config.json must contain both 'username' and 'app_password' fields");
+        spdlog::error("  - server_address is optional (default: 0.0.0.0:50051)");
         return 1;
     }
 
     std::string config_file = argv[1];
+    std::string server_address = "0.0.0.0:50051";
+    
+    // Allow custom server address if provided
+    if (argc >= 3) {
+        server_address = argv[2];
+    }
     
     // Load App Password configuration
     AppPasswordConfig app_password_config;
@@ -277,46 +343,27 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // Initialize recipients list
-    std::vector<std::string> recipients;
-    std::string subject = "Test Email";
-    std::string message = "This is a test email sent from C++ using libcurl with App Password authentication";
+    // Create the service implementation
+    EmailServiceImpl service(app_password_config);
     
-    // Parse command line arguments
-    if (argc >= 3) {
-        std::string arg2 = argv[2];
-        
-        // Check if the second argument is a file
-        std::ifstream test_file(arg2);
-        if (test_file.good()) {
-            // It's a file, read recipients from it
-            spdlog::info("Reading recipients from file: {}", arg2);
-            recipients = readRecipientsFromFile(arg2);
-            
-            // Set subject and message if provided
-            if (argc >= 4) subject = argv[3];
-            if (argc >= 5) message = argv[4];
-        } else {
-            // It's not a file, use it as a direct recipient
-            recipients.push_back(arg2);
-            
-            // Set subject and message if provided
-            if (argc >= 4) subject = argv[3];
-            if (argc >= 5) message = argv[4];
-        }
+    // Set up the server
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+    
+    // Start the server
+    std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+    spdlog::info("Email Service server started on {}", server_address);
+    spdlog::info("Using email account: {}", app_password_config.username);
+    
+    // Wait for the server to be shutdown
+    while (!service.isShutdownRequested()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
     
-    // Check if we have any recipients
-    if (recipients.empty()) {
-        spdlog::error("No recipients specified!");
-        return 1;
-    }
-    
-    // Send the email
-    if (!sendEmail(app_password_config, recipients, subject, message)) {
-        spdlog::error("Failed to send email");
-        return 1;
-    }
+    // Shutdown the server
+    spdlog::info("Shutting down server...");
+    server->Shutdown();
     
     return 0;
 }
